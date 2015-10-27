@@ -5,16 +5,16 @@ import com.atlassian.bamboo.chains.ChainExecution;
 import com.atlassian.bamboo.chains.ChainResultsSummary;
 import com.atlassian.bamboo.chains.plugins.PostChainAction;
 import com.atlassian.bamboo.security.EncryptionService;
+import com.atlassian.bamboo.variable.CustomVariableContext;
 import com.atlassian.sal.api.ApplicationProperties;
-
 import org.eclipse.egit.github.core.CommitStatus;
 import org.jetbrains.annotations.NotNull;
 
 public class GitHubStatusPostChain extends AbstractGitHubStatusAction implements PostChainAction {
 
     public GitHubStatusPostChain(ApplicationProperties applicationProperties,
-                                 EncryptionService encryptionService) {
-        super(applicationProperties, encryptionService);
+                                 EncryptionService encryptionService, CustomVariableContext ctx) {
+        super(applicationProperties, encryptionService, ctx);
     }
 
     @Override

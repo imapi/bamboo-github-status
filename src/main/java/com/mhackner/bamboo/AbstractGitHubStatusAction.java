@@ -3,11 +3,13 @@ package com.mhackner.bamboo;
 import com.atlassian.bamboo.chains.Chain;
 import com.atlassian.bamboo.chains.ChainExecution;
 import com.atlassian.bamboo.plugins.git.GitHubRepository;
+import com.atlassian.bamboo.plugins.git.GitRepository;
 import com.atlassian.bamboo.repository.RepositoryDefinition;
 import com.atlassian.bamboo.security.EncryptionService;
 import com.atlassian.bamboo.util.Narrow;
+import com.atlassian.bamboo.variable.CustomVariableContext;
+import com.atlassian.bamboo.variable.VariableDefinitionContext;
 import com.atlassian.sal.api.ApplicationProperties;
-
 import org.apache.commons.lang.StringUtils;
 import org.eclipse.egit.github.core.CommitStatus;
 import org.eclipse.egit.github.core.RepositoryId;
@@ -25,19 +27,28 @@ public abstract class AbstractGitHubStatusAction {
 
     private final ApplicationProperties applicationProperties;
     private final EncryptionService encryptionService;
+    private final CustomVariableContext ctx;
 
     public AbstractGitHubStatusAction(ApplicationProperties applicationProperties,
-                                      EncryptionService encryptionService) {
+                                      EncryptionService encryptionService, CustomVariableContext ctx) {
         this.applicationProperties = applicationProperties;
         this.encryptionService = encryptionService;
+        this.ctx = ctx;
     }
 
     void updateStatus(String status, Chain chain, ChainExecution chainExecution) {
+
         String disabled = chain.getBuildDefinition().getCustomConfiguration()
                 .get("custom.gitHubStatus.disabled");
-        if (Boolean.parseBoolean(disabled)) {
+
+        VariableDefinitionContext cvc = ctx.getVariableContexts().get("github.status_access_key");
+
+
+        if (Boolean.parseBoolean(disabled) || cvc == null) {
             return;
         }
+
+        String oauth = cvc.getValue();
 
         List<RepositoryDefinition> repos = chain.getEffectiveRepositoryDefinitions();
         if (repos.size() != 1) {
@@ -46,13 +57,6 @@ public abstract class AbstractGitHubStatusAction {
         }
 
         RepositoryDefinition repoDefinition = repos.get(0);
-        GitHubRepository repo = Narrow.downTo(repoDefinition.getRepository(),
-                GitHubRepository.class);
-        if (repo == null) {
-            log.info("Repo {} is not a GitHub repo.", repoDefinition.getName());
-            return;
-        }
-
         String sha = chainExecution.getBuildChanges().getVcsRevisionKey(repoDefinition.getId());
 
         @SuppressWarnings("deprecation")
@@ -60,20 +64,38 @@ public abstract class AbstractGitHubStatusAction {
                 StringUtils.removeEnd(applicationProperties.getBaseUrl(), "/"),
                 chainExecution.getPlanResultKey());
 
-        setStatus(status, sha, url, repo.getUsername(),
-                encryptionService.decrypt(repo.getEncryptedPassword()),
-                repo.getRepository());
+        GitHubRepository github = Narrow.downTo(repoDefinition.getRepository(), GitHubRepository.class);
+        if (github != null) {
+            setStatusForGithub(github, status, sha, url);
+        } else {
+            setStatusForGit(Narrow.downTo(repoDefinition.getRepository(), GitRepository.class), status, sha, url, oauth);
+        }
     }
 
-    private static void setStatus(String status, String sha, String url, String user, String pass,
-                                  String repo) {
-        GitHubClient client = new GitHubClient().setCredentials(user, pass);
+    private void setStatusForGithub(GitHubRepository github, String status, String sha, String url) {
+        GitHubClient client = new GitHubClient().setCredentials(github.getUsername(), encryptionService.decrypt(github.getEncryptedPassword()));
         CommitService commitService = new CommitService(client);
-        CommitStatus commitStatus = new CommitStatus()
-                .setState(status)
-                .setTargetUrl(url);
+        CommitStatus commitStatus = new CommitStatus().setState(status).setTargetUrl(url);
         try {
-            commitService.createStatus(RepositoryId.createFromId(repo), sha, commitStatus);
+            commitService.createStatus(RepositoryId.createFromId(github.getRepository()), sha, commitStatus);
+            log.info("GitHub status for commit {} set to {}.", sha, status);
+        } catch (IOException ex) {
+            log.error("Failed to update GitHub status", ex);
+        }
+    }
+
+    private static String normalizeUrl(String url) {
+        return (StringUtils.endsWithIgnoreCase(url, ".git")) ? StringUtils.substring(url, 0, url.length() - 4) : url;
+    }
+
+    private void setStatusForGit(GitRepository repo, String status, String sha, String url, String oauth) {
+        if (repo == null) return;
+
+        GitHubClient client = new GitHubClient().setOAuth2Token(oauth);
+        CommitService commitService = new CommitService(client);
+        CommitStatus commitStatus = new CommitStatus().setState(status).setTargetUrl(url);
+        try {
+            commitService.createStatus(RepositoryId.createFromUrl(normalizeUrl(repo.getAccessData().getRepositoryUrl())), sha, commitStatus);
             log.info("GitHub status for commit {} set to {}.", sha, status);
         } catch (IOException ex) {
             log.error("Failed to update GitHub status", ex);

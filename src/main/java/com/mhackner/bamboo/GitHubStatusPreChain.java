@@ -4,16 +4,16 @@ import com.atlassian.bamboo.chains.Chain;
 import com.atlassian.bamboo.chains.ChainExecution;
 import com.atlassian.bamboo.chains.plugins.PreChainAction;
 import com.atlassian.bamboo.security.EncryptionService;
+import com.atlassian.bamboo.variable.CustomVariableContext;
 import com.atlassian.sal.api.ApplicationProperties;
-
 import org.eclipse.egit.github.core.CommitStatus;
 import org.jetbrains.annotations.NotNull;
 
 public class GitHubStatusPreChain extends AbstractGitHubStatusAction implements PreChainAction {
 
     public GitHubStatusPreChain(ApplicationProperties applicationProperties,
-                                EncryptionService encryptionService) {
-        super(applicationProperties, encryptionService);
+                                EncryptionService encryptionService, CustomVariableContext ctx) {
+        super(applicationProperties, encryptionService, ctx);
     }
 
     @Override

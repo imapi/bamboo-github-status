@@ -18,4 +18,5 @@
 
     <component-import key="applicationProperties" interface="com.atlassian.sal.api.ApplicationProperties" />
     <component-import key="encryptionService" interface="com.atlassian.bamboo.security.EncryptionService" />
+    <component-import key="ctx" interface="com.atlassian.bamboo.variable.CustomVariableContext" />
 </atlassian-plugin>
